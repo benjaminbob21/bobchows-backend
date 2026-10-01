@@ -78,19 +78,27 @@ const createCheckoutSession = async (req: Request, res: Response) => {
       throw new Error("Restaurant not found");
     }
 
+    const lineItems = createLineItems(
+      checkoutSessionRequest,
+      restaurant.menuItems
+    );
+
+    const totalAmount =
+      lineItems.reduce(
+        (total, item) =>
+          total + (item.price_data?.unit_amount || 0) * (item.quantity || 1),
+        0
+      ) + Math.round(restaurant.deliveryPrice);
+
     const newOrder = new Order({
       restaurant: restaurant,
       user: req.userId,
       status: "placed",
       deliveryDetails: checkoutSessionRequest.deliveryDetails,
       cartItems: checkoutSessionRequest.cartItems,
+      totalAmount: totalAmount,
       createdAt: new Date(),
     });
-
-    const lineItems = createLineItems(
-      checkoutSessionRequest,
-      restaurant.menuItems
-    );
 
     const session = await createSession(
       lineItems,
@@ -107,7 +115,7 @@ const createCheckoutSession = async (req: Request, res: Response) => {
     res.json({ url: session.url });
   } catch (error: any) {
     console.log(error);
-    res.status(500).json({ message: error.raw.message });
+    res.status(500).json({ message: error.raw?.message || error.message || "Unable to create checkout session" });
   }
 };
 
@@ -124,10 +132,12 @@ const createLineItems = (
       throw new Error(`Menu item not found: ${cartItem.menuItemId}`);
     }
 
+    const unitAmount = Math.round(menuItem.price);
+
     const line_item: Stripe.Checkout.SessionCreateParams.LineItem = {
       price_data: {
         currency: "usd",
-        unit_amount: menuItem.price,
+        unit_amount: unitAmount,
         product_data: {
           name: menuItem.name,
         },
@@ -147,6 +157,8 @@ const createSession = async (
   deliveryPrice: number,
   restaurantId: string
 ) => {
+  const deliveryAmount = Math.round(deliveryPrice);
+
   const sessionData = await STRIPE.checkout.sessions.create({
     line_items: lineItems,
     shipping_options: [
@@ -155,7 +167,7 @@ const createSession = async (
           display_name: "Delivery",
           type: "fixed_amount",
           fixed_amount: {
-            amount: deliveryPrice,
+            amount: deliveryAmount,
             currency: "usd",
           },
         },
