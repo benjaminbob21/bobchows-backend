@@ -393,7 +393,7 @@ const createGroupOrder = async (req: Request, res: Response) => {
 const getGroupOrder = async (req: Request, res: Response) => {
   try {
     const groupOrder = await GroupOrder.find({
-      "paidParticipants.user": req.userId,
+      $or: [{ initiator: req.userId }, { "paidParticipants.user": req.userId }],
     })
       .populate("restaurant")
       .populate("paidParticipants.user");
