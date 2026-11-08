@@ -3,6 +3,10 @@ import mongoose from "mongoose";
 const orderSchema = new mongoose.Schema({
   restaurant: { type: mongoose.Schema.Types.ObjectId, ref: "Restaurant" },
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  groupOrderId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "GroupOrder",
+  },
   deliveryDetails: {
     email: { type: String, required: true },
     name: { type: String, required: true },

@@ -39,7 +39,15 @@ const groupOrderSchema = new mongoose.Schema({
   amountPerPerson: { type: Number, required: true },
   status: {
     type: String,
-    enum: ["created", "inProgress", "paid", "placed", "cancelled"],
+    enum: [
+      "created",
+      "inProgress",
+      "paid",
+      "placed",
+      "outForDelivery",
+      "delivered",
+      "cancelled",
+    ],
     default: "created",
   },
   expiresAt: { type: Date },

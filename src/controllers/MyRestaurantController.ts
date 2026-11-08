@@ -3,6 +3,7 @@ import Restaurant from "../models/restaurant";
 import cloudinary from "cloudinary";
 import mongoose from "mongoose";
 import Order from "../models/order";
+import GroupOrder from "../models/groupOrder";
 
 const getMyRestaurant = async (req: Request, res: Response) => {
   try {
@@ -109,6 +110,15 @@ const updateOrderStatus = async (req: Request, res: Response) => {
 
     order.status = status;
     await order.save();
+
+    // If this order belongs to a group order, mirror the status so the
+    // customer's group-order status page reflects restaurant progress.
+    if (order.groupOrderId) {
+      await GroupOrder.updateOne(
+        { _id: order.groupOrderId },
+        { $set: { status } }
+      );
+    }
 
     res.status(200).json(order);
   } catch (error) {

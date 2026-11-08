@@ -68,6 +68,17 @@ const handleGroupOrderPayment = async (
     return;
   }
 
+  // Dedupe: never add the same user twice, even if the webhook fires
+  // alongside the client-side confirm fallback.
+  if (
+    groupOrder.paidParticipants.some(
+      (p) => p.user && p.user.toString() === user._id.toString()
+    )
+  ) {
+    console.log(`User ${userId} already in paidParticipants, skipping`);
+    return;
+  }
+
   if (groupOrder.deliveryDetails) {
     if (groupOrder.deliveryDetails.name != "") {
       groupOrder.deliveryDetails.name += `, ${name}`;
@@ -88,6 +99,7 @@ const handleGroupOrderPayment = async (
     const newOrder = new Order({
       restaurant: groupOrder.restaurant,
       user: groupOrder.initiator,
+      groupOrderId: groupOrder._id,
       status: "paid",
       deliveryDetails: groupOrder.deliveryDetails,
       cartItems: groupOrder.cartItems,
@@ -333,7 +345,7 @@ const createSession = async (
       groupOrderId: groupId,
     },
     success_url: isGroupOrder
-      ? `${FRONTEND_URL}/group-order-status?success=true`
+      ? `${FRONTEND_URL}/group-order-status?success=true&groupOrderId=${groupId}`
       : `${FRONTEND_URL}/order-status?success=true`,
     cancel_url: `${FRONTEND_URL}/detail/${restaurantId}?cancelled=true`,
   });
@@ -487,6 +499,84 @@ const joinGroupOrder = async (req: Request, res: Response) => {
   }
 };
 
+
+const confirmGroupPayment = async (req: Request, res: Response) => {
+  try {
+    const { groupOrderId } = req.body;
+
+    const groupOrder = await GroupOrder.findById(groupOrderId);
+    if (!groupOrder) {
+      return res.status(404).json({ message: "Group order not found" });
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Atomic push: the $ne filter guarantees this user is only added once,
+    // even if two confirm requests arrive concurrently (e.g. React StrictMode
+    // double-firing the redirect effect in dev).
+    const result = await GroupOrder.updateOne(
+      {
+        _id: groupOrder._id,
+        "paidParticipants.user": { $ne: user._id },
+      },
+      {
+        $push: {
+          paidParticipants: {
+            email: user.email,
+            amount: groupOrder.amountPerPerson,
+            user: user._id,
+          },
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res
+        .status(200)
+        .json({ message: "Already confirmed", groupOrder });
+    }
+
+    // Re-read the fresh document (now includes the pushed participant)
+    const updated = await GroupOrder.findById(groupOrderId);
+    if (!updated) {
+      return res.status(404).json({ message: "Group order not found" });
+    }
+
+    if (updated.deliveryDetails) {
+      if (updated.deliveryDetails.name != "") {
+        updated.deliveryDetails.name += `, ${user.name}`;
+      } else {
+        updated.deliveryDetails.name = user.name;
+      }
+    }
+
+    if (updated.paidParticipants.length === updated.totalParticipants) {
+      updated.status = "paid";
+      const newOrder = new Order({
+        restaurant: updated.restaurant,
+        user: updated.initiator,
+        groupOrderId: updated._id,
+        status: "paid",
+        deliveryDetails: updated.deliveryDetails,
+        cartItems: updated.cartItems,
+        createdAt: new Date(),
+        totalAmount: updated.totalAmount,
+      });
+      await newOrder.save();
+    }
+
+    await updated.save();
+
+    res.status(200).json({ message: "Payment confirmed", groupOrder: updated });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Something went wrong" });
+  }
+};
+
 export default {
   getMyOrders,
   createCheckoutSession,
@@ -495,4 +585,6 @@ export default {
   getGroupOrder,
   joinGroupOrder,
   getLinkAndOrder,
+  confirmGroupPayment,
 };
+

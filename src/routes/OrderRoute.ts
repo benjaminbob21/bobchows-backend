@@ -28,4 +28,11 @@ router.post(
   OrderController.joinGroupOrder
 );
 
+router.post(
+  "/confirm-group-payment",
+  jwtCheck,
+  jwtParse,
+  OrderController.confirmGroupPayment
+);
+
 export default router;
