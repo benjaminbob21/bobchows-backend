@@ -4,6 +4,7 @@ import Restaurant, { MenuItemType } from "../models/restaurant";
 import Order from "../models/order";
 import GroupOrder from "../models/groupOrder";
 import User from "../models/user";
+import { emitGroupOrderUpdate, isWebSocketEnabled } from "../socket";
 
 const STRIPE = new Stripe(process.env.STRIPE_API_KEY as string);
 const FRONTEND_URL = process.env.FRONTEND_URL as string;
@@ -110,6 +111,11 @@ const handleGroupOrderPayment = async (
   }
 
   await groupOrder.save();
+
+  // Real-time: push the updated state to every client watching this group order
+  if (isWebSocketEnabled()) {
+    await emitGroupOrderUpdate(groupOrderId);
+  }
 };
 
 const stripeWebhookHandler = async (req: Request, res: Response) => {
@@ -569,6 +575,11 @@ const confirmGroupPayment = async (req: Request, res: Response) => {
     }
 
     await updated.save();
+
+    // Real-time: notify all participants that a member's payment landed
+    if (isWebSocketEnabled()) {
+      await emitGroupOrderUpdate(groupOrderId);
+    }
 
     res.status(200).json({ message: "Payment confirmed", groupOrder: updated });
   } catch (error) {

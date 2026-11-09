@@ -2,13 +2,15 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import "dotenv/config";
 import mongoose from "mongoose";
+import { createServer } from "http";
 import myUserRoute from "./routes/MyUserRoute";
 import { v2 as cloudinary } from "cloudinary";
 import myRestaurantRoute from "./routes/MyRestaurantRoute";
 import restaurantRoute from "./routes/RestaurantRoute";
 import orderRoute from "./routes/OrderRoute";
 import reviewRoutes from "./routes/MyReviewRoute";
-
+import benchmarkRoute from "./routes/BenchmarkRoute";
+import { initSocket, isWebSocketEnabled } from "./socket";
 mongoose
   .connect(process.env.MONGODB_CONNECTION_STRING as string)
   .then(() => console.log("Connected to database!"));
@@ -36,8 +38,18 @@ app.use("/api/my/restaurant", myRestaurantRoute);
 app.use("/api/restaurant", restaurantRoute);
 app.use("/api/order", orderRoute);
 app.use("/api/reviews", reviewRoutes);
+app.use("/api/benchmark", benchmarkRoute);
 
 const port = process.env.PORT || 7001;
-app.listen(port, () => {
+const server = createServer(app);
+
+if (isWebSocketEnabled()) {
+  initSocket(server);
+  console.log("Socket.IO real-time sync enabled (USE_WEBSOCKET=true)");
+} else {
+  console.log("Socket.IO disabled - falling back to HTTP polling");
+}
+
+server.listen(port, () => {
   console.log(`server started on localhost:${port}`);
 });

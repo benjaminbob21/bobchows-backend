@@ -4,6 +4,7 @@ import cloudinary from "cloudinary";
 import mongoose from "mongoose";
 import Order from "../models/order";
 import GroupOrder from "../models/groupOrder";
+import { emitGroupOrderUpdate, isWebSocketEnabled } from "../socket";
 
 const getMyRestaurant = async (req: Request, res: Response) => {
   try {
@@ -118,6 +119,10 @@ const updateOrderStatus = async (req: Request, res: Response) => {
         { _id: order.groupOrderId },
         { $set: { status } }
       );
+      // Real-time: push the restaurant's status change to all participants
+      if (isWebSocketEnabled()) {
+        await emitGroupOrderUpdate(order.groupOrderId.toString());
+      }
     }
 
     res.status(200).json(order);
