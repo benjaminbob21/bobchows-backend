@@ -133,6 +133,8 @@ const stripeWebhookHandler = async (req: Request, res: Response) => {
     return res.status(400).send(`Webhook error: ${error.message}`);
   }
 
+  res.status(200).send();
+
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
     if (session.metadata) {
@@ -143,8 +145,6 @@ const stripeWebhookHandler = async (req: Request, res: Response) => {
         await handleIndividualOrderPayment(orderId, session);
       }
     }
-
-    res.status(200).send();
   }
 };
 
